@@ -1,0 +1,91 @@
+PROMPTS USED TO GUIDE THE AI-ASSISTED REFACTOR
+================================================
+
+1. ARCHITECTURE ANALYSIS
+-------------------------
+"Analyze legacy_enrollment_processor.py without changing it. Walk through
+its full execution flow from startup through CSV reading, the SQLite
+calls, the credit-limit/prereq/Dean-override decision logic, the
+simulated email print statements, and the HTML report string
+concatenation. Identify at least three real code smells actually present
+in this file (not generic textbook examples) -- point to the specific
+lines and explain why each one is a problem. Write the result to
+ARCHITECTURE.md."
+
+2. ARCHITECTURE BLUEPRINT
+--------------------------
+"Before writing any refactored code, propose a three-layer structure for
+this enrollment processor: a domain layer for the credit-limit/prereq/
+Dean-override rules, an infrastructure layer for the CSV reading, SQLite
+access, and simulated email, and a presentation layer for the HTML
+report. Keep it simple -- this is a college assignment, not a production
+system. Show me the directory layout before writing files."
+
+3. DOMAIN / BUSINESS-RULE EXTRACTION
+--------------------------------------
+"Pull the enrollment decision logic out of the god-loop into
+domain/enrollment.py. It should take a parsed row and the student's
+current enrolled-credit total and return a status string. Preserve the
+exact status strings from the legacy code
+('ENROLLED', 'ENROLLED (OVERRIDE)', 'FAILED - CREDIT LIMIT EXCEEDED',
+'FAILED - MISSING PREREQS') and the exact order of checks: credit limit
+first, then prereqs, then Dean override, then failure. Do not add
+validation or fix anything that looks like a bug -- match the original
+if/else chain exactly. This module should have zero knowledge of SQLite,
+CSV, or HTML."
+
+4. CSV EXTRACTION
+-------------------
+"Create infrastructure/csv_reader.py that reads students.csv and returns
+a list of EnrollmentRequest objects using the domain dataclass. Keep the
+column order and the 'skip header row' behavior identical to the legacy
+script. Don't add error handling the legacy script doesn't have -- we're
+preserving behavior, not improving it in this pass."
+
+5. DATABASE EXTRACTION
+-------------------------
+"Create infrastructure/db_manager.py with a class that owns the SQLite
+connection: table creation, the SUM(credits) WHERE status='ENROLLED'
+query for a student's current credits, inserting a row, and committing/
+closing. Keep the SQL exactly as it is in the legacy file, including the
+literal 'ENROLLED' string match -- I noticed that query does NOT match
+'ENROLLED (OVERRIDE)', which means override credits don't count toward
+later credit-limit checks for the same student. Preserve that exactly,
+don't correct it."
+
+6. EMAIL-SERVICE EXTRACTION
+------------------------------
+"Create infrastructure/email_service.py with a function that reproduces
+the four print() statements from the legacy script (enrolled, override,
+failed-credit-limit, failed-missing-prereqs) word for word. Make clear in
+a comment that this is simulated email, not a real integration, same as
+the original."
+
+7. HTML / PRESENTATION EXTRACTION
+------------------------------------
+"Create presentation/html_report.py with a class that builds the same
+HTML structure as the legacy script: <html><body><h1>Enrollment Run:
+{timestamp}</h1><table border='1'> with a header row, one <tr> per
+enrollment styled red via style='color:red;' when the status contains
+'FAILED', and the same closing tags. Give it a method to write the
+result to enrollment_report.html, matching the legacy output filename
+exactly (the sample project tree in the assignment doesn't specify a
+name, so we're keeping the legacy filename as the source of truth)."
+
+8. CREATING THE ORCHESTRATOR
+--------------------------------
+"Write main.py that wires csv_reader, db_manager, domain.enrollment, and
+the email service and html_report together in the same order the legacy
+god-loop did: for each CSV row, get current credits, evaluate the
+decision, send the simulated email, insert the DB row, add the HTML row.
+main.py should only coordinate -- it must not contain any of the
+if/else business rules itself."
+
+9. BEHAVIORAL VERIFICATION
+-----------------------------
+"Run legacy_enrollment_processor.py against students.csv and save its
+console output, its SQLite table contents, and its generated HTML. Then
+run the refactored main.py against the same CSV and compare all three
+outputs. They should match exactly except for the HTML timestamp, since
+both call datetime.now(). If anything differs, tell me exactly what and
+why -- don't just say it passed."
